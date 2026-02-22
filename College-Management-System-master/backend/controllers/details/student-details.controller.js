@@ -7,10 +7,23 @@ const sendResetMail = require("../../utils/SendMail");
 
 const loginStudentController = async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { enrollmentNo, email, password } = req.body;
 
-    const user = await studentDetails.findOne({ email });
+    if ((!enrollmentNo && !email) || !password) {
+      return ApiResponse.badRequest("Enrollment No or Email and password are required").send(res);
+    }
 
+    let user;
+
+    if (enrollmentNo) {
+      user = await studentDetails.findOne({
+      enrollmentNo: enrollmentNo.toUpperCase(),
+      });
+    } else if(email) {
+      user = await studentDetails.findOne({
+        email: email.toLowerCase(),
+      });
+    }
     if (!user) {
       return ApiResponse.notFound("User not found").send(res);
     }
@@ -21,13 +34,15 @@ const loginStudentController = async (req, res) => {
       return ApiResponse.unauthorized("Invalid password").send(res);
     }
 
-    const token = jwt.sign({ _id: user._id,role:"Student" }, process.env.JWT_SECRET, {
-      expiresIn: "1h",
-    });
+    const token = jwt.sign(
+      { _id: user._id, role: "Student" },
+      process.env.JWT_SECRET,
+      { expiresIn: "1h" }
+    );
 
     return ApiResponse.success({ token }, "Login successful").send(res);
   } catch (error) {
-    console.error("Login Error: ", error);
+    console.log("Login Error:", error);
     return ApiResponse.internalServerError().send(res);
   }
 };
@@ -52,28 +67,58 @@ const getAllDetailsController = async (req, res) => {
 
 const registerStudentController = async (req, res) => {
   try {
-    const profile = req.file.filename;
+    const profile = req.file?.filename || null;
+    // Auto generate enrollment number
+    const currentYear = new Date().getFullYear().toString().slice(-2);
+    // Fetch branch details
+    const Branch = require("../../models/branch.model");
+    const branchData = await Branch.findById(req.body.branchId);
 
-    const enrollmentNo = Math.floor(100000 + Math.random() * 900000);
-    const email = `${enrollmentNo}@gmail.com`;
+    if (!branchData) {
+      return ApiResponse.badRequest("Invalid branch").send(res);
+    }
+    // Get Branch Name
+    let branchCode = branchData.name.toUpperCase();
+    // Convert to Short Code
+    if (branchCode === "CSE") branchCode = "CS";
+    else if (branchCode === "CIVIL") branchCode = "CIV";
+    else if (branchCode === "EEE") branchCode = "EE";
+    else if (branchCode === "ECE") branchCode = "EC";
+    else if (branchCode === "EIE") branchCode = "EI";
+    // CB, DS, IT, CSM remain same
 
+    // Count students of same branch & same year
+    const count = await studentDetails.countDocuments({
+    branchId: req.body.branchId,
+    enrollmentNo: { $regex: `^Y${currentYear}A${branchCode}` }
+  });
+
+    // Generate sequence
+    const sequenceNo = (count + 1).toString().padStart(3, "0");
+
+    // Final format
+    const enrollmentNo = `Y${currentYear}A${branchCode}${sequenceNo}`;
+    // Check duplicate enrollment
+    const existing = await studentDetails.findOne({ enrollmentNo });
+    if (existing) {
+      return ApiResponse.conflict("Enrollment number already exists").send(res);
+    }
     const user = await studentDetails.create({
       ...req.body,
       profile,
       password: "student123",
-      email,
       enrollmentNo,
+      email: `${enrollmentNo.toLowerCase()}@college.com`,
     });
 
     const sanitizedUser = await studentDetails
       .findById(user._id)
-      .select("-__v -password");
+      .select("-password -__v");
 
-    return ApiResponse.created(sanitizedUser, "Student Details Added!").send(
-      res
-    );
+    return ApiResponse.created(sanitizedUser, "Student Created Successfully").send(res);
+
   } catch (error) {
-    console.error("Add Details Error: ", error);
+    console.error(error);
     return ApiResponse.internalServerError().send(res);
   }
 };
@@ -302,7 +347,7 @@ const searchStudentsController = async (req, res) => {
     }
 
     if (enrollmentNo) {
-      query.enrollmentNo = enrollmentNo;
+      query.enrollmentNo = enrollmentNo.toUpperCase();
     }
 
     if (name) {

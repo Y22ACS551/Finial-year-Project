@@ -16,16 +16,24 @@ const USER_TYPES = {
 const LoginForm = ({ selected, onSubmit, formData, setFormData }) => (
   <form onSubmit={onSubmit} autoComplete="off" className="login-glass-card">
     <div>
-      <label className="login-label">{selected} Email</label>
+      <label className="login-label">
+        {selected === "Student"
+        ?"Enrollment Number or Email"
+        :`${selected}Email`}
+      </label>
+
       <input
-        type="email"
+        type={selected==="Student"?"text":"email"}
         required
-        value={formData.email}
-        onChange={(e) =>
-          setFormData({ ...formData, email: e.target.value })
+        value={
+          selected === "Student" ? formData.enrollmentNo:formData.email}
+        onChange={(e) =>selected==="Student"?
+          setFormData({ ...formData, enrollmentNo: e.target.value })
+          :setFormData({...formData,email:e.target.value})
         }
         className="login-input"
-        placeholder={`Enter ${selected.toLowerCase()} email`}
+        placeholder={selected==="Student"?"Enter the Enrollment Number":`Enter
+           ${selected.toLowerCase()} email`}
       />
     </div>
 
@@ -74,7 +82,7 @@ const Login = () => {
   const type = searchParams.get("type");
   const cardRef = useRef(null);
 
-  const [formData, setFormData] = useState({ email: "", password: "" });
+  const [formData, setFormData] = useState({ enrollmentNo: "", email:"",password: "" });
   const [selected, setSelected] = useState(USER_TYPES.STUDENT);
 
   useEffect(() => {
@@ -122,25 +130,50 @@ const Login = () => {
   const handleUserTypeSelect = (type) => {
     setSelected(type);
     setSearchParams({ type: type.toLowerCase() });
-    setFormData({ email: "", password: "" });
+    setFormData({ enrollmentNo:"",email: "", password: "" });
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    try {
-      const res = await axiosWrapper.post(
-        `/${selected.toLowerCase()}/login`,
-        formData
-      );
-      const { token } = res.data.data;
-      localStorage.setItem("userToken", token);
-      localStorage.setItem("userType", selected);
-      dispatch(setUserToken(token));
-      navigate(`/${selected.toLowerCase()}`);
-    } catch (err) {
-      toast.error(err.response?.data?.message || "Login failed");
+ const handleSubmit = async (e) => {
+  e.preventDefault();
+
+  try {
+    let payload;
+
+    if (selected === "Student") {
+      const input = formData.enrollmentNo.trim();
+
+      const isEmail = input.includes("@");
+
+      payload = isEmail
+        ? {
+            email: input.toLowerCase(),
+            password: formData.password,
+          }
+        : {
+            enrollmentNo: input.toUpperCase(),
+            password: formData.password,
+          };
+    } else {
+      payload = formData;
     }
-  };
+
+    const res = await axiosWrapper.post(
+      `/${selected.toLowerCase()}/login`,
+      payload
+    );
+
+    const { token } = res.data.data;
+
+    localStorage.setItem("userToken", token);
+    localStorage.setItem("userType", selected);
+
+    dispatch(setUserToken(token));
+    navigate(`/${selected.toLowerCase()}`);
+
+  } catch (err) {
+    toast.error(err.response?.data?.message || "Login failed");
+  }
+};
 
   return (
     <>

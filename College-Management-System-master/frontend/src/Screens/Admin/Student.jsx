@@ -819,14 +819,12 @@ const Student = () => {
 
               <div className="mt-8 flex justify-between items-center gap-4">
                 <div>
-                  <p className="text-sm">
-                    Default login will be{" "}
-                    <span className="font-bold">
-                      {formData.enrollmentNo || "enrollment_no"}@gmail.com
-                    </span>{" "}
-                    and password will be{" "}
-                    <span className="font-bold">student123</span>
-                  </p>
+                  <p className="text-sm text-blue-600 mt-2">
+                  Default Login: <br />
+                  Enrollment No will be generated in format:
+                  <span className="font-bold">Y[YEAR]A[BRANCH][NUMBER]</span><br />
+                  Default Password:
+                  <span className="font-bold"> student123 </span></p>
                 </div>
                 <div className="flex gap-4">
                   <CustomButton
