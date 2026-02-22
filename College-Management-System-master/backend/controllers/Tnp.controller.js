@@ -84,12 +84,17 @@ exports.createDrive = async (req, res) => {
     const drive = new Tnp({
       ...req.body,
       type: "DRIVE",
-      brochure: req.file ? req.file.filename : null,
+
+      // 🔥 NEW HYBRID LOGIC
+      googleFormLink: req.body.googleFormLink || null,
+      attachment: req.file ? req.file.filename : null,
+
       createdBy: req.user._id,
       createdByRole: req.user.role,
     });
 
     await drive.save();
+
     res.json({ success: true, data: drive });
   } catch (e) {
     console.error(e);
@@ -101,6 +106,10 @@ exports.getAllDrives = async (req, res) => {
   try {
     const drives = await Tnp.find({ type: "DRIVE" })
       .populate("eligibleBranches")
+      .populate({
+        path:"applications.studentId",
+        select:"middleName email branchId enrollmentNo"
+      })
       .sort({ createdAt: -1 });
 
     res.json({ success: true, data: drives });

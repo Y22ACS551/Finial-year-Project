@@ -121,7 +121,8 @@ app.use("/api/timetable", require("./routes/timetable.route"));
 app.use("/api/material", require("./routes/material.route"));
 app.use("/api/exam", require("./routes/exam.route"));
 app.use("/api/marks", require("./routes/marks.route"));
-app.use("/api/tnp", require("./routes/tnp.route"));
+app.use("/api/tnp", require("./routes/Tnp.route"));
+
 
 
 // Server start
@@ -2924,25 +2925,31 @@ module.exports = {
 --- FILE: F:\PROJECT\College-Management-System-master\backend\controllers\Tnp.controller.js ---
 
 const Tnp = require("../models/Tnp.model");
+const Student = require("../models/details/student-details.model");
+const Marks = require("../models/marks.model");
 
-/* GET ALL */
+/* =========================================================
+   NOTICE CONTROLLERS
+========================================================= */
+
 exports.getAllTnp = async (req, res) => {
   try {
-    const list = await Tnp.find().sort({ createdAt: -1 });
+    const list = await Tnp.find({ type: "NOTICE" }).sort({ createdAt: -1 });
     res.json({ success: true, data: list });
   } catch (e) {
     res.status(500).json({ success: false });
   }
 };
 
-/* CREATE */
 exports.createTnp = async (req, res) => {
   try {
     const tnp = new Tnp({
       ...req.body,
+      type: "NOTICE",
       createdBy: req.user._id,
       createdByRole: req.user.role,
     });
+
     await tnp.save();
     res.json({ success: true });
   } catch (e) {
@@ -2950,7 +2957,6 @@ exports.createTnp = async (req, res) => {
   }
 };
 
-/* UPDATE */
 exports.updateTnp = async (req, res) => {
   try {
     await Tnp.findByIdAndUpdate(req.params.id, req.body);
@@ -2960,7 +2966,6 @@ exports.updateTnp = async (req, res) => {
   }
 };
 
-/* DELETE */
 exports.deleteTnp = async (req, res) => {
   try {
     await Tnp.findByIdAndDelete(req.params.id);
@@ -2970,26 +2975,226 @@ exports.deleteTnp = async (req, res) => {
   }
 };
 
-/* TOGGLE SEEN */
 exports.toggleSeen = async (req, res) => {
-  const { id } = req.params;
-  const user = req.user;
+  try {
+    const tnp = await Tnp.findById(req.params.id);
+    if (!tnp) return res.status(404).json({ success: false });
 
-  const tnp = await Tnp.findById(id);
-  if (!tnp) return res.status(404).json({ success: false });
+    const index = tnp.seenBy.findIndex(
+      (u) => u.userId.toString() === req.user._id.toString()
+    );
 
-  const index = tnp.seenBy.findIndex(
-    (u) => u.userId.toString() === user._id.toString()
-  );
+    if (index === -1) {
+      tnp.seenBy.push({ userId: req.user._id, role: req.user.role });
+    } else {
+      tnp.seenBy.splice(index, 1);
+    }
 
-  if (index === -1) {
-    tnp.seenBy.push({ userId: user._id, role: user.role });
-  } else {
-    tnp.seenBy.splice(index, 1);
+    await tnp.save();
+    res.json({ success: true });
+  } catch (e) {
+    res.status(400).json({ success: false });
   }
+};
 
-  await tnp.save();
-  res.json({ success: true });
+/* =========================================================
+   DRIVE CONTROLLERS
+========================================================= */
+
+exports.createDrive = async (req, res) => {
+  try {
+    if (!["admin", "faculty"].includes(req.user.role.toLowerCase())) {
+      return res.status(403).json({ success: false });
+    }
+
+    const drive = new Tnp({
+      ...req.body,
+      type: "DRIVE",
+      brochure: req.file ? req.file.filename : null,
+      createdBy: req.user._id,
+      createdByRole: req.user.role,
+    });
+
+    await drive.save();
+    res.json({ success: true, data: drive });
+  } catch (e) {
+    console.error(e);
+    res.status(400).json({ success: false });
+  }
+};
+
+exports.getAllDrives = async (req, res) => {
+  try {
+    const drives = await Tnp.find({ type: "DRIVE" })
+      .populate("eligibleBranches")
+      .sort({ createdAt: -1 });
+
+    res.json({ success: true, data: drives });
+  } catch (e) {
+    res.status(500).json({ success: false });
+  }
+};
+
+exports.getDriveDetails = async (req, res) => {
+  try {
+    const drive = await Tnp.findById(req.params.id)
+      .populate("eligibleBranches")
+      .populate("applications.studentId");
+
+    if (!drive) return res.status(404).json({ success: false });
+
+    res.json({ success: true, data: drive });
+  } catch (e) {
+    res.status(500).json({ success: false });
+  }
+};
+
+exports.applyToDrive = async (req, res) => {
+  try {
+    if (req.user.role.toLowerCase() !== "student") {
+      return res.status(403).json({ success: false });
+    }
+
+    const drive = await Tnp.findById(req.params.id);
+    if (!drive) return res.status(404).json({ success: false });
+
+    if (drive.deadline && new Date(drive.deadline) < new Date()) {
+      drive.isExpired = true;
+      await drive.save();
+      return res.status(400).json({
+        success: false,
+        message: "Drive expired",
+      });
+    }
+
+    const student = await Student.findById(req.user._id);
+    if (!student)
+      return res.status(404).json({
+        success: false,
+        message: "Student not found",
+      });
+
+    if (student.placementStatus === "PLACED") {
+      return res.status(400).json({
+        success: false,
+        message: "You are already placed",
+      });
+    }
+
+    const alreadyApplied = drive.applications.find(
+      (a) => a.studentId.toString() === student._id.toString()
+    );
+
+    if (alreadyApplied) {
+      return res.status(400).json({
+        success: false,
+        message: "Already applied",
+      });
+    }
+
+    if (
+      drive.eligibleBranches.length > 0 &&
+      !drive.eligibleBranches.some(
+        (b) => b.toString() === student.branchId.toString()
+      )
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Branch not eligible",
+      });
+    }
+
+    const studentMarks = await Marks.find({ studentId: student._id });
+
+    if (studentMarks.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "No marks available",
+      });
+    }
+
+    const totalMarks = studentMarks.reduce(
+      (sum, m) => sum + m.marksObtained,
+      0
+    );
+
+    const averageMarks = totalMarks / studentMarks.length;
+
+    if (drive.minMarks && averageMarks < drive.minMarks) {
+      return res.status(400).json({
+        success: false,
+        message: "Marks criteria not satisfied",
+      });
+    }
+
+    drive.applications.push({
+      studentId: student._id,
+      branchId: student.branchId,
+      marks: averageMarks,
+      resume: req.file ? req.file.filename : null,
+      status: "APPLIED",
+    });
+
+    await drive.save();
+
+    res.json({ success: true });
+  } catch (e) {
+    console.error(e);
+    res.status(400).json({ success: false });
+  }
+};
+
+exports.autoShortlist = async (req, res) => {
+  try {
+    if (!["admin", "faculty"].includes(req.user.role.toLowerCase())) {
+      return res.status(403).json({ success: false });
+    }
+
+    const drive = await Tnp.findById(req.params.id);
+    if (!drive) return res.status(404).json({ success: false });
+
+    drive.applications.forEach((app) => {
+      app.status = "SHORTLISTED";
+    });
+
+    await drive.save();
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ success: false });
+  }
+};
+
+exports.updateApplicationStatus = async (req, res) => {
+  try {
+    if (!["admin", "faculty"].includes(req.user.role.toLowerCase())) {
+      return res.status(403).json({ success: false });
+    }
+
+    const { driveId, applicationId } = req.params;
+    const { status } = req.body;
+
+    const drive = await Tnp.findById(driveId);
+    if (!drive) return res.status(404).json({ success: false });
+
+    const application = drive.applications.id(applicationId);
+    if (!application)
+      return res.status(404).json({ success: false });
+
+    application.status = status;
+
+    if (status === "SELECTED") {
+      await Student.findByIdAndUpdate(application.studentId, {
+        placementStatus: "PLACED",
+      });
+    }
+
+    await drive.save();
+
+    res.json({ success: true });
+  } catch (e) {
+    console.error(e);
+    res.status(400).json({ success: false });
+  }
 };
 
 --- FILE: F:\PROJECT\College-Management-System-master\backend\controllers\details\admin-details.controller.js ---
@@ -4229,31 +4434,30 @@ module.exports = mongoose.model("Exam", examSchema);
 
 const mongoose = require("mongoose");
 
-const marksSchema = new mongoose.Schema({
-  studentId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "StudentDetails",
-    required: true,
+const marksSchema = new mongoose.Schema(
+  {
+    studentId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "StudentDetail",
+      required: true,
+    },
+    subjectId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Subject",
+      required: true,
+    },
+    examId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Exam",
+      required: true,
+    },
+    marksObtained: {
+      type: Number,
+      required: true,
+    },
   },
-  subjectId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "Subject",
-    required: true,
-  },
-  marksObtained: {
-    type: Number,
-    required: true,
-  },
-  semester: {
-    type: Number,
-    required: true,
-  },
-  examId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "Exam",
-    required: true,
-  },
-});
+  { timestamps: true }
+);
 
 module.exports = mongoose.model("Marks", marksSchema);
 
@@ -4451,11 +4655,53 @@ module.exports = mongoose.model("Timetable", TimeTable);
 
 const mongoose = require("mongoose");
 
+const ApplicationSchema = new mongoose.Schema(
+  {
+    studentId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "StudentDetail",
+      required: true,
+    },
+
+    resume: {
+      type: String,
+      default: null, // âœ… FIXED (not required)
+    },
+
+    branchId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Branch",
+      required: true,
+    },
+
+    marks: {
+      type: Number,
+      default: 0, // âœ… FIXED (safe default)
+    },
+
+    status: {
+      type: String,
+      enum: ["APPLIED", "SHORTLISTED", "SELECTED", "REJECTED"],
+      default: "APPLIED",
+    },
+
+    appliedAt: {
+      type: Date,
+      default: Date.now,
+    },
+  },
+  { _id: true }
+);
+
 const TnpSchema = new mongoose.Schema(
   {
+    /* =========================
+       NOTICE FIELDS
+    ========================== */
+
     title: { type: String, required: true },
     description: { type: String, required: true },
-    deadline: { type: String },
+    deadline: { type: Date },
 
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,
@@ -4475,9 +4721,46 @@ const TnpSchema = new mongoose.Schema(
         role: String,
       },
     ],
+
+    /* =========================
+       DRIVE FIELDS
+    ========================== */
+
+    type: {
+      type: String,
+      enum: ["NOTICE", "DRIVE"],
+      default: "NOTICE",
+    },
+
+    companyName: String,
+    jobRole: String,
+    brochure: String,
+
+    eligibleBranches: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Branch",
+      },
+    ],
+
+    minMarks: Number,
+
+    applications: [ApplicationSchema],
+
+    isExpired: {
+      type: Boolean,
+      default: false,
+    },
   },
   { timestamps: true }
 );
+
+TnpSchema.pre("save", function (next) {
+  if (this.deadline && new Date(this.deadline) < new Date()) {
+    this.isExpired = true;
+  }
+  next();
+});
 
 module.exports = mongoose.model("Tnp", TnpSchema);
 
@@ -4700,6 +4983,7 @@ module.exports = facultyDetails;
 
 const mongoose = require("mongoose");
 const bcrypt = require("bcryptjs");
+
 const studentDetailsSchema = new mongoose.Schema(
   {
     enrollmentNo: {
@@ -4772,6 +5056,14 @@ const studentDetailsSchema = new mongoose.Schema(
       enum: ["active", "inactive"],
       default: "active",
     },
+
+    // âœ… NEW FIELD â€” Placement Status
+    placementStatus: {
+      type: String,
+      enum: ["NOT_PLACED", "PLACED"],
+      default: "NOT_PLACED",
+    },
+
     bloodGroup: {
       type: String,
       enum: ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"],
@@ -4841,7 +5133,31 @@ module.exports = router;
 
 --- FILE: F:\PROJECT\College-Management-System-master\backend\routes\marks.route.js ---
 
+// const express = require("express");
+// const {
+//   getMarksController,
+//   addMarksController,
+//   deleteMarksController,
+//   addBulkMarksController,
+//   getStudentsWithMarksController,
+//   getStudentMarksController,
+// } = require("../controllers/marks.controller");
+// const auth = require("../middlewares/auth.middleware");
+// const router = express.Router();
+// const upload = require("../middlewares/multer.middleware");
+
+// router.get("/", auth, getMarksController);
+// router.get("/students", auth, getStudentsWithMarksController);
+// router.get("/student", auth, getStudentMarksController);
+// router.post("/", auth, addMarksController);
+// router.post("/bulk", auth, addBulkMarksController);
+// router.delete("/:id", auth, deleteMarksController);
+
+//module.exports = router;
 const express = require("express");
+const router = express.Router();
+const auth = require("../middlewares/auth.middleware");
+
 const {
   getMarksController,
   addMarksController,
@@ -4850,16 +5166,24 @@ const {
   getStudentsWithMarksController,
   getStudentMarksController,
 } = require("../controllers/marks.controller");
-const auth = require("../middlewares/auth.middleware");
-const router = express.Router();
-const upload = require("../middlewares/multer.middleware");
 
 router.get("/", auth, getMarksController);
-router.get("/students", auth, getStudentsWithMarksController);
-router.get("/student", auth, getStudentMarksController);
 router.post("/", auth, addMarksController);
-router.post("/bulk", auth, addBulkMarksController);
 router.delete("/:id", auth, deleteMarksController);
+
+router.post("/bulk", auth, addBulkMarksController);
+
+router.get(
+  "/students-with-marks",
+  auth,
+  getStudentsWithMarksController
+);
+
+router.get(
+  "/student",
+  auth,
+  getStudentMarksController
+);
 
 module.exports = router;
 
@@ -5255,19 +5579,59 @@ const express = require("express");
 const router = express.Router();
 
 const auth = require("../middlewares/auth.middleware");
+const upload = require("../middlewares/multer.middleware");
 const ctrl = require("../controllers/Tnp.controller");
 
-// router.get("/tnp", auth, ctrl.getAllTnp);
-// router.post("/tnp", auth, ctrl.createTnp);
-// router.put("/tnp/:id", auth, ctrl.updateTnp);
-// router.delete("/tnp/:id", auth, ctrl.deleteTnp);
-// router.patch("/tnp/:id/seen", auth, ctrl.toggleSeen);
+/* =========================================
+   EXISTING NOTICE ROUTES
+========================================= */
 
 router.get("/", auth, ctrl.getAllTnp);
 router.post("/", auth, ctrl.createTnp);
 router.put("/:id", auth, ctrl.updateTnp);
 router.delete("/:id", auth, ctrl.deleteTnp);
 router.patch("/:id/seen", auth, ctrl.toggleSeen);
+
+/* =========================================
+   DRIVE ROUTES
+========================================= */
+
+/* Create Placement Drive (Admin / Faculty) */
+router.post(
+  "/drive",
+  auth,
+  upload.single("brochure"),
+  ctrl.createDrive
+);
+
+/* Get All Drives */
+router.get("/drive", auth, ctrl.getAllDrives);
+
+/* Get Single Drive Details */
+router.get("/drive/:id", auth, ctrl.getDriveDetails);
+
+/* Apply to Drive (Student) */
+router.post(
+  "/drive/:id/apply",
+  auth,
+  upload.single("resume"),
+  ctrl.applyToDrive
+);
+
+/* Auto Shortlist (Admin / Faculty) */
+router.put(
+  "/drive/:id/shortlist",
+  auth,
+  ctrl.autoShortlist
+);
+
+/* Update Application Status */
+router.put(
+  "/drive/:driveId/application/:applicationId",
+  auth,
+  ctrl.updateApplicationStatus
+);
+
 module.exports = router;
 
 --- FILE: F:\PROJECT\College-Management-System-master\backend\routes\details\admin-details.route.js ---
@@ -24801,9 +25165,17 @@ import Heading from "../components/Heading";
 import Loading from "../components/Loading";
 
 const Tnp = ({ userRole }) => {
+  /* ===============================
+     STATE
+  =============================== */
   const [tnps, setTnps] = useState([]);
+  const [drives, setDrives] = useState([]);
+  const [resumeFile, setResumeFile] = useState(null);
+  const [brochureFile, setBrochureFile] = useState(null);
   const [loading, setLoading] = useState(true);
+
   const [showForm, setShowForm] = useState(false);
+  const [showDriveForm, setShowDriveForm] = useState(false);
   const [editId, setEditId] = useState(null);
 
   const [form, setForm] = useState({
@@ -24812,22 +25184,45 @@ const Tnp = ({ userRole }) => {
     deadline: "",
   });
 
+  const [driveForm, setDriveForm] = useState({
+    title: "",
+    description: "",
+    deadline: "",
+    minMarks: "",
+  });
+
+  /* ===============================
+     FETCH DATA
+  =============================== */
   const fetchTnp = useCallback(async () => {
     try {
       const res = await axiosWrapper.get("/tnp");
       setTnps(res.data.data || []);
     } catch {
-      toast.error("Failed to load T&P");
-    } finally {
-      setLoading(false);
+      toast.error("Failed to load T&P notices");
+    }
+  }, []);
+
+  const fetchDrives = useCallback(async () => {
+    try {
+      const res = await axiosWrapper.get("/tnp/drive");
+      setDrives(res.data.data || []);
+    } catch {
+      toast.error("Failed to load Drives");
     }
   }, []);
 
   useEffect(() => {
-    fetchTnp();
-  }, [fetchTnp]);
+    const loadAll = async () => {
+      await Promise.all([fetchTnp(), fetchDrives()]);
+      setLoading(false);
+    };
+    loadAll();
+  }, [fetchTnp, fetchDrives]);
 
-  // STUDENT COUNTS
+  /* ===============================
+     NOTICE FUNCTIONS
+  =============================== */
   const total = tnps.length;
   const seen = tnps.filter((t) => t.seenBy?.length > 0).length;
   const unseen = total - seen;
@@ -24843,10 +25238,10 @@ const Tnp = ({ userRole }) => {
     try {
       if (editId) {
         await axiosWrapper.put(`/tnp/${editId}`, form);
-        toast.success("T&P updated");
+        toast.success("Notice updated");
       } else {
         await axiosWrapper.post("/tnp", form);
-        toast.success("T&P created");
+        toast.success("Notice created");
       }
       resetForm();
       fetchTnp();
@@ -24860,13 +25255,13 @@ const Tnp = ({ userRole }) => {
     setForm({
       title: item.title,
       description: item.description,
-      deadline: item.deadline || "",
+      deadline: item.deadline?.split("T")[0] || "",
     });
     setShowForm(true);
   };
 
   const deleteTnp = async (id) => {
-    if (!window.confirm("Delete this T&P post?")) return;
+    if (!window.confirm("Delete this notice?")) return;
     try {
       await axiosWrapper.delete(`/tnp/${id}`);
       toast.success("Deleted");
@@ -24885,13 +25280,79 @@ const Tnp = ({ userRole }) => {
     }
   };
 
+  /* ===============================
+     CREATE DRIVE
+  =============================== */
+  const submitDriveForm = async (e) => {
+    e.preventDefault();
+    try {
+      const formData = new FormData();
+      formData.append("title", driveForm.title);
+      formData.append("description", driveForm.description);
+      formData.append("deadline", driveForm.deadline);
+      formData.append("minMarks", driveForm.minMarks);
+
+      if (brochureFile) {
+        formData.append("brochure", brochureFile);
+      }
+
+      await axiosWrapper.post("/tnp/drive", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+
+      toast.success("Drive created successfully");
+      setShowDriveForm(false);
+      setDriveForm({
+        title: "",
+        description: "",
+        deadline: "",
+        minMarks: "",
+      });
+      setBrochureFile(null);
+      fetchDrives();
+    } catch {
+      toast.error("Failed to create drive");
+    }
+  };
+
+  /* ===============================
+     APPLY TO DRIVE
+  =============================== */
+  const applyToDrive = async (driveId) => {
+    try {
+      if (!resumeFile) {
+        toast.error("Please upload resume");
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append("resume", resumeFile);
+
+      await axiosWrapper.post(
+        `/tnp/drive/${driveId}/apply`,
+        formData,
+        { headers: { "Content-Type": "multipart/form-data" } }
+      );
+
+      toast.success("Applied successfully");
+      setResumeFile(null);
+      fetchDrives();
+    } catch (err) {
+      toast.error(
+        err?.response?.data?.message || "Application failed"
+      );
+    }
+  };
+
   if (loading) return <Loading />;
 
   return (
-    <div className="px-6">
+    <div className="px-4 md:px-8 max-w-5xl mx-auto">
       <Heading title="Training & Placement" />
 
-      {/* STUDENT READ / UNREAD */}
+      {/* ================= NOTICE SECTION ================= */}
+      <h2 className="text-xl font-semibold mt-6 mb-2">Notices</h2>
+
       {userRole === "student" && (
         <div className="mb-4 flex gap-6">
           <span className="text-red-600">Unread: {unseen}</span>
@@ -24899,66 +25360,46 @@ const Tnp = ({ userRole }) => {
         </div>
       )}
 
-      {/* ADMIN / FACULTY ADD BUTTON */}
       {(userRole === "admin" || userRole === "faculty") && (
         <button
           onClick={() => setShowForm(true)}
           className="bg-blue-600 text-white px-4 py-2 rounded my-4"
         >
-          + Add T & P
+          + Add Notice
         </button>
       )}
 
-      {/* MODAL FORM (LIKE NOTICE) */}
       {showForm && (
         <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg w-[420px] p-6 shadow-lg">
+          <div className="bg-white rounded-lg w-full max-w-md p-6 shadow-lg">
             <h2 className="text-lg font-semibold mb-4">
-              {editId ? "Edit T & P" : "Create T & P"}
+              {editId ? "Edit Notice" : "Create Notice"}
             </h2>
 
             <form onSubmit={submitForm} className="space-y-4">
-              <input
-                required
-                placeholder="Title"
+              <input required placeholder="Title"
                 className="w-full border p-2 rounded"
                 value={form.title}
-                onChange={(e) =>
-                  setForm({ ...form, title: e.target.value })
-                }
+                onChange={(e)=>setForm({...form,title:e.target.value})}
               />
-
-              <textarea
-                required
-                placeholder="Description"
+              <textarea required placeholder="Description"
                 className="w-full border p-2 rounded"
                 value={form.description}
-                onChange={(e) =>
-                  setForm({ ...form, description: e.target.value })
-                }
+                onChange={(e)=>setForm({...form,description:e.target.value})}
               />
-
-              <input
-                type="date"
+              <input type="date"
                 className="w-full border p-2 rounded"
                 value={form.deadline}
-                onChange={(e) =>
-                  setForm({ ...form, deadline: e.target.value })
-                }
+                onChange={(e)=>setForm({...form,deadline:e.target.value})}
               />
-
-              <div className="flex justify-end gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={resetForm}
-                  className="px-4 py-2 bg-gray-300 rounded"
-                >
+              <div className="flex justify-end gap-3">
+                <button type="button"
+                  onClick={()=>setShowForm(false)}
+                  className="px-4 py-2 bg-gray-300 rounded">
                   Cancel
                 </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-blue-600 text-white rounded"
-                >
+                <button type="submit"
+                  className="px-4 py-2 bg-blue-600 text-white rounded">
                   {editId ? "Update" : "Create"}
                 </button>
               </div>
@@ -24967,64 +25408,113 @@ const Tnp = ({ userRole }) => {
         </div>
       )}
 
-      {tnps.length === 0 && <p>No data found</p>}
-
-      {/* LIST */}
-      <div className="space-y-4">
-        {tnps.map((item) => (
+      <div className="space-y-4 mb-10">
+        {tnps.map((item)=>(
           <div key={item._id} className="border p-4 rounded bg-white">
-            <h3 className="font-semibold text-lg">{item.title}</h3>
+            <h3 className="font-semibold">{item.title}</h3>
             <p>{item.description}</p>
 
-            {item.deadline && (
-              <p className="text-sm text-gray-600">
-                Deadline: {item.deadline}
-              </p>
-            )}
-
-            {/* ADMIN / FACULTY SEEN COUNT */}
-            {(userRole === "admin" || userRole === "faculty") && (
-              <p className="text-sm mt-1 text-green-600">
-                Seen: {item.seenBy?.length || 0}
-              </p>
-            )}
-
-            <div className="flex gap-4 mt-3">
-              {/* STUDENT TOGGLE */}
-              {userRole === "student" && (
+            <div className="flex gap-4 mt-3 flex-wrap">
+              {userRole==="student" && (
                 <button
-                  onClick={() => toggleSeen(item._id)}
-                  className={`px-3 py-1 rounded text-white ${
-                    item.seenBy?.length > 0
-                      ? "bg-green-500"
-                      : "bg-red-500"
-                  }`}
-                >
-                  {item.seenBy?.length > 0 ? "Seen" : "Mark as Seen"}
+                  onClick={()=>toggleSeen(item._id)}
+                  className="px-3 py-1 bg-green-500 text-white rounded">
+                  Mark Seen
                 </button>
               )}
 
-              {/* ADMIN / FACULTY CRUD */}
-              {(userRole === "admin" || userRole === "faculty") && (
+              {(userRole==="admin"||userRole==="faculty") && (
                 <>
-                  <button
-                    onClick={() => startEdit(item)}
-                    className="text-yellow-600"
-                  >
-                    Edit
-                  </button>
-                  <button
-                    onClick={() => deleteTnp(item._id)}
-                    className="text-red-600"
-                  >
-                    Delete
-                  </button>
+                  <button onClick={()=>startEdit(item)} className="text-yellow-600">Edit</button>
+                  <button onClick={()=>deleteTnp(item._id)} className="text-red-600">Delete</button>
                 </>
               )}
             </div>
           </div>
         ))}
       </div>
+
+      {/* ================= DRIVE SECTION ================= */}
+      <h2 className="text-xl font-semibold mt-6 mb-4">Placement Drives</h2>
+
+      {(userRole === "admin" || userRole === "faculty") && (
+        <button
+          onClick={() => setShowDriveForm(true)}
+          className="bg-green-600 text-white px-4 py-2 rounded mb-4"
+        >
+          + Create Drive
+        </button>
+      )}
+
+      {showDriveForm && (
+        <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg w-full max-w-md p-6 shadow-lg">
+            <h2 className="text-lg font-semibold mb-4">Create Drive</h2>
+
+            <form onSubmit={submitDriveForm} className="space-y-4">
+              <input required placeholder="Title"
+                className="w-full border p-2 rounded"
+                value={driveForm.title}
+                onChange={(e)=>setDriveForm({...driveForm,title:e.target.value})}
+              />
+              <textarea required placeholder="Description"
+                className="w-full border p-2 rounded"
+                value={driveForm.description}
+                onChange={(e)=>setDriveForm({...driveForm,description:e.target.value})}
+              />
+              <input type="date"
+                className="w-full border p-2 rounded"
+                value={driveForm.deadline}
+                onChange={(e)=>setDriveForm({...driveForm,deadline:e.target.value})}
+              />
+              <input type="number"
+                placeholder="Minimum Marks"
+                className="w-full border p-2 rounded"
+                value={driveForm.minMarks}
+                onChange={(e)=>setDriveForm({...driveForm,minMarks:e.target.value})}
+              />
+              <input type="file"
+                accept=".pdf"
+                onChange={(e)=>setBrochureFile(e.target.files[0])}
+              />
+              <div className="flex justify-end gap-3">
+                <button type="button"
+                  onClick={()=>setShowDriveForm(false)}
+                  className="px-4 py-2 bg-gray-300 rounded">
+                  Cancel
+                </button>
+                <button type="submit"
+                  className="px-4 py-2 bg-green-600 text-white rounded">
+                  Create
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      <div className="space-y-4">
+        {drives.map((drive)=>(
+          <div key={drive._id} className="border p-4 rounded bg-gray-50">
+            <h3 className="font-semibold">{drive.title}</h3>
+            <p>{drive.description}</p>
+
+            {userRole==="student" && (
+              <div className="mt-3 space-y-2">
+                <input type="file"
+                  onChange={(e)=>setResumeFile(e.target.files[0])}
+                />
+                <button
+                  onClick={()=>applyToDrive(drive._id)}
+                  className="px-4 py-2 bg-blue-600 text-white rounded">
+                  Apply
+                </button>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+
     </div>
   );
 };

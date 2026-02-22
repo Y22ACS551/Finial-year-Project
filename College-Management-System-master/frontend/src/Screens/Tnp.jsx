@@ -11,7 +11,7 @@ const Tnp = ({ userRole }) => {
   const [tnps, setTnps] = useState([]);
   const [drives, setDrives] = useState([]);
   const [resumeFile, setResumeFile] = useState(null);
-  const [brochureFile, setBrochureFile] = useState(null);
+  const [attachmentFile, setAttachmentFile] = useState(null);
   const [loading, setLoading] = useState(true);
 
   const [showForm, setShowForm] = useState(false);
@@ -22,6 +22,8 @@ const Tnp = ({ userRole }) => {
     title: "",
     description: "",
     deadline: "",
+    minMarks:"",
+    googleFormLink:"",
   });
 
   const [driveForm, setDriveForm] = useState({
@@ -30,6 +32,8 @@ const Tnp = ({ userRole }) => {
     deadline: "",
     minMarks: "",
   });
+  const [selectedDrive, setSelectedDrive] = useState(null);
+  const [showApplicantsModal, setShowApplicantsModal] = useState(false);
 
   /* ===============================
      FETCH DATA
@@ -72,6 +76,7 @@ const Tnp = ({ userRole }) => {
     setEditId(null);
     setShowForm(false);
   };
+  
 
   const submitForm = async (e) => {
     e.preventDefault();
@@ -124,36 +129,38 @@ const Tnp = ({ userRole }) => {
      CREATE DRIVE
   =============================== */
   const submitDriveForm = async (e) => {
-    e.preventDefault();
-    try {
-      const formData = new FormData();
-      formData.append("title", driveForm.title);
-      formData.append("description", driveForm.description);
-      formData.append("deadline", driveForm.deadline);
-      formData.append("minMarks", driveForm.minMarks);
+  e.preventDefault();
+  try {
+    const formData = new FormData();
+    formData.append("title", driveForm.title);
+    formData.append("description", driveForm.description);
+    formData.append("deadline", driveForm.deadline);
+    formData.append("minMarks", driveForm.minMarks);
+    formData.append("googleFormLink", driveForm.googleFormLink);
 
-      if (brochureFile) {
-        formData.append("brochure", brochureFile);
-      }
-
-      await axiosWrapper.post("/tnp/drive", formData, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
-
-      toast.success("Drive created successfully");
-      setShowDriveForm(false);
-      setDriveForm({
-        title: "",
-        description: "",
-        deadline: "",
-        minMarks: "",
-      });
-      setBrochureFile(null);
-      fetchDrives();
-    } catch {
-      toast.error("Failed to create drive");
+    if (attachmentFile) {
+      formData.append("attachment", attachmentFile);
     }
-  };
+
+    await axiosWrapper.post("/tnp/drive", formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+
+    toast.success("Drive created successfully");
+    setShowDriveForm(false);
+    setDriveForm({
+      title: "",
+      description: "",
+      deadline: "",
+      minMarks: "",
+      googleFormLink: "",
+    });
+    setAttachmentFile(null);
+    fetchDrives();
+  } catch {
+    toast.error("Failed to create drive");
+  }
+};
 
   /* ===============================
      APPLY TO DRIVE
@@ -313,9 +320,14 @@ const Tnp = ({ userRole }) => {
                 value={driveForm.minMarks}
                 onChange={(e)=>setDriveForm({...driveForm,minMarks:e.target.value})}
               />
-              <input type="file"
-                accept=".pdf"
-                onChange={(e)=>setBrochureFile(e.target.files[0])}
+              <input 
+              type="url" 
+              placeholder="Google Form Link (Optional)" 
+              className="w-full border p-2 rounded"
+              value={driveForm.googleFormLink}
+              onChange={(e) =>
+                setDriveForm({ ...driveForm, googleFormLink: e.target.value })
+              }
               />
               <div className="flex justify-end gap-3">
                 <button type="button"
@@ -338,23 +350,123 @@ const Tnp = ({ userRole }) => {
           <div key={drive._id} className="border p-4 rounded bg-gray-50">
             <h3 className="font-semibold">{drive.title}</h3>
             <p>{drive.description}</p>
+            <p className="text-sm text-gray-600">
+              Deadline:{drive.deadline ? new 
+              Date(drive.deadline).toLocaleDateString()
+              : "No deadline"}
+              </p>
+              <p className="text-sm text-blue-600 font-medium mt-2">Total Applicants:
+                {drive.applications?.length || 0}</p>
+                {/* shortlist count */}
+                <div className="text-sm mt-1 space-y-1">
+                  <p className="text-green-600">
+                    Shortlisted:{drive.applications?.filter(app=>
+                      app.status === "SHORTLISTED").length ||0
+                    }
+                  </p>
+                </div>
 
             {userRole==="student" && (
               <div className="mt-3 space-y-2">
-                <input type="file"
+                {/* if already Applied*/drive.applications?.some((app)=>
+                app.studentId === localStorage.getItem("userId")
+                ) ? (
+                  <p className="text-green-600 font-semibold">✅ Already Applied</p>
+                ):typeof drive.googleFormLink === "string" &&
+                drive.googleFormLink.startsWith("http")?(
+                  <a
+                  href={drive.googleFormLink}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-4 py-2 bg-purple-600 text-white rounded inline-block"
+                  >Apply via Google Form
+                  </a>
+                  ) : (
+                  <>
+                  <input
+                  type="file"
                   onChange={(e)=>setResumeFile(e.target.files[0])}
-                />
-                <button
+                  />
+                  <button
                   onClick={()=>applyToDrive(drive._id)}
-                  className="px-4 py-2 bg-blue-600 text-white rounded">
+                  className="px-4 py-2 bg-blue-600 text-white rounded"
+                  >
                   Apply
-                </button>
-              </div>
+                  </button>
+                  </>
+                )}
+                {/* Show Attachment if exists */}
+                {drive.attachment && (
+                  <a
+                  href={`http://localhost:4000/media/${drive.attachment}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-blue-600 underline block mt-2"
+                  >View Attachment
+                  </a>
+                )}
+                </div>
+              )}
+              {(userRole === "admin" || userRole === "faculty") && (
+                <button onClick={() => { setSelectedDrive(drive); setShowApplicantsModal(true);}
+              }className="mt-2 px-3 py-1 bg-indigo-600 text-white rounded text-sm">
+               View Applicants
+              </button>
             )}
-          </div>
+            </div>
         ))}
       </div>
+      {showApplicantsModal && selectedDrive && (
+  <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
+    <div className="bg-white rounded-lg w-full max-w-3xl p-6 shadow-lg max-h-[80vh] overflow-y-auto">
+      
+      <h2 className="text-lg font-semibold mb-4">
+        Applicants - {selectedDrive.title}
+      </h2>
 
+      {selectedDrive.applications?.length === 0 ? (
+        <p className="text-gray-500">No applicants yet</p>
+      ) : (
+        <div className="space-y-3">
+          {selectedDrive.applications.map((app) => (
+            <div
+              key={app._id}
+              className="border p-3 rounded flex justify-between items-center"
+            >
+              <div>
+                <p className="font-medium">Student Name:{app.studentId?.middleName || "N/A"}</p>
+                <p className="text-sm text-gray-600">Email:{app.studentId?.email || "N/A"}</p>
+                <p className="text-sm text-gray-600">Roll No:{app.studentId?.enrollmentNo || "N/A"}</p>
+                <p className="text-sm text-gray-600 mt-1">
+                  Status: {app.status || "APPLIED"}
+                </p>
+              </div>
+
+              {app.resume && (
+                <a
+                  href={`http://localhost:4000/media/${app.resume}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-blue-600 underline text-sm"
+                >
+                  View Resume
+                </a>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="flex justify-end mt-4">
+        <button
+          onClick={() => setShowApplicantsModal(false)}
+          className="px-4 py-2 bg-gray-400 text-white rounded">
+          Close
+        </button>
+      </div>
+    </div>
+  </div>
+)}
     </div>
   );
 };

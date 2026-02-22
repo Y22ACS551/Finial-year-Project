@@ -10,7 +10,7 @@ const ApplicationSchema = new mongoose.Schema(
 
     resume: {
       type: String,
-      default: null, // ✅ FIXED (not required)
+      default: null,
     },
 
     branchId: {
@@ -21,7 +21,7 @@ const ApplicationSchema = new mongoose.Schema(
 
     marks: {
       type: Number,
-      default: 0, // ✅ FIXED (safe default)
+      default: 0,
     },
 
     status: {
@@ -89,6 +89,20 @@ const TnpSchema = new mongoose.Schema(
     ],
 
     minMarks: Number,
+
+    /* =========================
+       🔥 NEW HYBRID FIELDS
+    ========================== */
+
+    googleFormLink: {
+      type: String,
+      default: null,
+    },
+
+    attachment: {
+      type: String,
+      default: null,
+    },
 
     applications: [ApplicationSchema],
 

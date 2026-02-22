@@ -23,7 +23,7 @@ router.patch("/:id/seen", auth, ctrl.toggleSeen);
 router.post(
   "/drive",
   auth,
-  upload.single("brochure"),
+  upload.single("attachment"), // 🔥 CHANGED HERE
   ctrl.createDrive
 );
 
