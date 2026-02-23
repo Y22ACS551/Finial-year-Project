@@ -5,6 +5,19 @@ const auth = require("../middlewares/auth.middleware");
 const upload = require("../middlewares/multer.middleware");
 const ctrl = require("../controllers/Tnp.controller");
 
+// pdf
+router.get("/export/:driveId/:status", auth, ctrl.exportDriveApplications);
+// csv
+router.get(
+  "/export-csv/:driveId/:status",
+  auth,
+  ctrl.exportDriveApplicationsCSV,
+);
+router.patch(
+  "/drive/:driveId/application/:appId/status",
+  auth,
+  ctrl.updateApplicationStatus,
+);
 /* =========================================
    EXISTING NOTICE ROUTES
 ========================================= */
@@ -24,7 +37,7 @@ router.post(
   "/drive",
   auth,
   upload.single("attachment"), // 🔥 CHANGED HERE
-  ctrl.createDrive
+  ctrl.createDrive,
 );
 
 /* Get All Drives */
@@ -38,21 +51,17 @@ router.post(
   "/drive/:id/apply",
   auth,
   upload.single("resume"),
-  ctrl.applyToDrive
+  ctrl.applyToDrive,
 );
 
 /* Auto Shortlist (Admin / Faculty) */
-router.put(
-  "/drive/:id/shortlist",
-  auth,
-  ctrl.autoShortlist
-);
+router.put("/drive/:id/shortlist", auth, ctrl.autoShortlist);
 
 /* Update Application Status */
 router.put(
   "/drive/:driveId/application/:applicationId",
   auth,
-  ctrl.updateApplicationStatus
+  ctrl.updateApplicationStatus,
 );
 
 module.exports = router;

@@ -3,6 +3,7 @@ import toast from "react-hot-toast";
 import axiosWrapper from "../utils/AxiosWrapper";
 import Heading from "../components/Heading";
 import Loading from "../components/Loading";
+import { FaFilePdf, FaFileCsv } from "react-icons/fa";
 
 const Tnp = ({ userRole }) => {
   /* ===============================
@@ -22,8 +23,8 @@ const Tnp = ({ userRole }) => {
     title: "",
     description: "",
     deadline: "",
-    minMarks:"",
-    googleFormLink:"",
+    minMarks: "",
+    googleFormLink: "",
   });
 
   const [driveForm, setDriveForm] = useState({
@@ -34,6 +35,7 @@ const Tnp = ({ userRole }) => {
   });
   const [selectedDrive, setSelectedDrive] = useState(null);
   const [showApplicantsModal, setShowApplicantsModal] = useState(false);
+  const [exportOpenId, setExportOpenId] = useState(null);
 
   /* ===============================
      FETCH DATA
@@ -76,7 +78,6 @@ const Tnp = ({ userRole }) => {
     setEditId(null);
     setShowForm(false);
   };
-  
 
   const submitForm = async (e) => {
     e.preventDefault();
@@ -129,38 +130,38 @@ const Tnp = ({ userRole }) => {
      CREATE DRIVE
   =============================== */
   const submitDriveForm = async (e) => {
-  e.preventDefault();
-  try {
-    const formData = new FormData();
-    formData.append("title", driveForm.title);
-    formData.append("description", driveForm.description);
-    formData.append("deadline", driveForm.deadline);
-    formData.append("minMarks", driveForm.minMarks);
-    formData.append("googleFormLink", driveForm.googleFormLink);
+    e.preventDefault();
+    try {
+      const formData = new FormData();
+      formData.append("title", driveForm.title);
+      formData.append("description", driveForm.description);
+      formData.append("deadline", driveForm.deadline);
+      formData.append("minMarks", driveForm.minMarks);
+      formData.append("googleFormLink", driveForm.googleFormLink);
 
-    if (attachmentFile) {
-      formData.append("attachment", attachmentFile);
+      if (attachmentFile) {
+        formData.append("attachment", attachmentFile);
+      }
+
+      await axiosWrapper.post("/tnp/drive", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+
+      toast.success("Drive created successfully");
+      setShowDriveForm(false);
+      setDriveForm({
+        title: "",
+        description: "",
+        deadline: "",
+        minMarks: "",
+        googleFormLink: "",
+      });
+      setAttachmentFile(null);
+      fetchDrives();
+    } catch {
+      toast.error("Failed to create drive");
     }
-
-    await axiosWrapper.post("/tnp/drive", formData, {
-      headers: { "Content-Type": "multipart/form-data" },
-    });
-
-    toast.success("Drive created successfully");
-    setShowDriveForm(false);
-    setDriveForm({
-      title: "",
-      description: "",
-      deadline: "",
-      minMarks: "",
-      googleFormLink: "",
-    });
-    setAttachmentFile(null);
-    fetchDrives();
-  } catch {
-    toast.error("Failed to create drive");
-  }
-};
+  };
 
   /* ===============================
      APPLY TO DRIVE
@@ -171,26 +172,74 @@ const Tnp = ({ userRole }) => {
         toast.error("Please upload resume");
         return;
       }
-
       const formData = new FormData();
       formData.append("resume", resumeFile);
 
-      await axiosWrapper.post(
-        `/tnp/drive/${driveId}/apply`,
-        formData,
-        { headers: { "Content-Type": "multipart/form-data" } }
-      );
+      await axiosWrapper.post(`/tnp/drive/${driveId}/apply`, formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
 
       toast.success("Applied successfully");
       setResumeFile(null);
       fetchDrives();
     } catch (err) {
-      toast.error(
-        err?.response?.data?.message || "Application failed"
-      );
+      toast.error(err?.response?.data?.message || "Application failed");
     }
   };
+  const handleExport = async (driveId, status) => {
+    try {
+      const response = await axiosWrapper.get(
+        `/tnp/export/${driveId}/${status}`,
+        {
+          responseType: "blob",
+        },
+      );
 
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement("a");
+      link.href = url;
+      link.setAttribute("download", `${status}.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    } catch (error) {
+      toast.error("Failed to download PDF");
+    }
+  };
+  const handleExportCSV = async (driveId, status) => {
+    try {
+      const response = await axiosWrapper.get(
+        `/tnp/export-csv/${driveId}/${status}`,
+        {
+          responseType: "blob",
+        },
+      );
+
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement("a");
+      link.href = url;
+      link.setAttribute("download", `${status}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    } catch (error) {
+      toast.error("Failed to download CSV");
+    }
+  };
+  const updateStatus = async (driveId, applicationId, status) => {
+    try {
+      await axiosWrapper.patch(
+        `/tnp/drive/${driveId}/application/${applicationId}/status`,
+        { status },
+      );
+
+      toast.success("Status updated");
+
+      fetchDrives(); // refresh data
+    } catch (error) {
+      toast.error("Failed to update status");
+    }
+  };
   if (loading) return <Loading />;
 
   return (
@@ -224,29 +273,40 @@ const Tnp = ({ userRole }) => {
             </h2>
 
             <form onSubmit={submitForm} className="space-y-4">
-              <input required placeholder="Title"
+              <input
+                required
+                placeholder="Title"
                 className="w-full border p-2 rounded"
                 value={form.title}
-                onChange={(e)=>setForm({...form,title:e.target.value})}
+                onChange={(e) => setForm({ ...form, title: e.target.value })}
               />
-              <textarea required placeholder="Description"
+              <textarea
+                required
+                placeholder="Description"
                 className="w-full border p-2 rounded"
                 value={form.description}
-                onChange={(e)=>setForm({...form,description:e.target.value})}
+                onChange={(e) =>
+                  setForm({ ...form, description: e.target.value })
+                }
               />
-              <input type="date"
+              <input
+                type="date"
                 className="w-full border p-2 rounded"
                 value={form.deadline}
-                onChange={(e)=>setForm({...form,deadline:e.target.value})}
+                onChange={(e) => setForm({ ...form, deadline: e.target.value })}
               />
               <div className="flex justify-end gap-3">
-                <button type="button"
-                  onClick={()=>setShowForm(false)}
-                  className="px-4 py-2 bg-gray-300 rounded">
+                <button
+                  type="button"
+                  onClick={() => setShowForm(false)}
+                  className="px-4 py-2 bg-gray-300 rounded"
+                >
                   Cancel
                 </button>
-                <button type="submit"
-                  className="px-4 py-2 bg-blue-600 text-white rounded">
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-blue-600 text-white rounded"
+                >
                   {editId ? "Update" : "Create"}
                 </button>
               </div>
@@ -256,24 +316,35 @@ const Tnp = ({ userRole }) => {
       )}
 
       <div className="space-y-4 mb-10">
-        {tnps.map((item)=>(
+        {tnps.map((item) => (
           <div key={item._id} className="border p-4 rounded bg-white">
             <h3 className="font-semibold">{item.title}</h3>
             <p>{item.description}</p>
 
             <div className="flex gap-4 mt-3 flex-wrap">
-              {userRole==="student" && (
+              {userRole === "student" && (
                 <button
-                  onClick={()=>toggleSeen(item._id)}
-                  className="px-3 py-1 bg-green-500 text-white rounded">
+                  onClick={() => toggleSeen(item._id)}
+                  className="px-3 py-1 bg-green-500 text-white rounded"
+                >
                   Mark Seen
                 </button>
               )}
 
-              {(userRole==="admin"||userRole==="faculty") && (
+              {(userRole === "admin" || userRole === "faculty") && (
                 <>
-                  <button onClick={()=>startEdit(item)} className="text-yellow-600">Edit</button>
-                  <button onClick={()=>deleteTnp(item._id)} className="text-red-600">Delete</button>
+                  <button
+                    onClick={() => startEdit(item)}
+                    className="text-yellow-600"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    onClick={() => deleteTnp(item._id)}
+                    className="text-red-600"
+                  >
+                    Delete
+                  </button>
                 </>
               )}
             </div>
@@ -299,44 +370,62 @@ const Tnp = ({ userRole }) => {
             <h2 className="text-lg font-semibold mb-4">Create Drive</h2>
 
             <form onSubmit={submitDriveForm} className="space-y-4">
-              <input required placeholder="Title"
+              <input
+                required
+                placeholder="Title"
                 className="w-full border p-2 rounded"
                 value={driveForm.title}
-                onChange={(e)=>setDriveForm({...driveForm,title:e.target.value})}
+                onChange={(e) =>
+                  setDriveForm({ ...driveForm, title: e.target.value })
+                }
               />
-              <textarea required placeholder="Description"
+              <textarea
+                required
+                placeholder="Description"
                 className="w-full border p-2 rounded"
                 value={driveForm.description}
-                onChange={(e)=>setDriveForm({...driveForm,description:e.target.value})}
+                onChange={(e) =>
+                  setDriveForm({ ...driveForm, description: e.target.value })
+                }
               />
-              <input type="date"
+              <input
+                type="date"
                 className="w-full border p-2 rounded"
                 value={driveForm.deadline}
-                onChange={(e)=>setDriveForm({...driveForm,deadline:e.target.value})}
+                onChange={(e) =>
+                  setDriveForm({ ...driveForm, deadline: e.target.value })
+                }
               />
-              <input type="number"
+              <input
+                type="number"
                 placeholder="Minimum Marks"
                 className="w-full border p-2 rounded"
                 value={driveForm.minMarks}
-                onChange={(e)=>setDriveForm({...driveForm,minMarks:e.target.value})}
+                onChange={(e) =>
+                  setDriveForm({ ...driveForm, minMarks: e.target.value })
+                }
               />
-              <input 
-              type="url" 
-              placeholder="Google Form Link (Optional)" 
-              className="w-full border p-2 rounded"
-              value={driveForm.googleFormLink}
-              onChange={(e) =>
-                setDriveForm({ ...driveForm, googleFormLink: e.target.value })
-              }
+              <input
+                type="url"
+                placeholder="Google Form Link (Optional)"
+                className="w-full border p-2 rounded"
+                value={driveForm.googleFormLink}
+                onChange={(e) =>
+                  setDriveForm({ ...driveForm, googleFormLink: e.target.value })
+                }
               />
               <div className="flex justify-end gap-3">
-                <button type="button"
-                  onClick={()=>setShowDriveForm(false)}
-                  className="px-4 py-2 bg-gray-300 rounded">
+                <button
+                  type="button"
+                  onClick={() => setShowDriveForm(false)}
+                  className="px-4 py-2 bg-gray-300 rounded"
+                >
                   Cancel
                 </button>
-                <button type="submit"
-                  className="px-4 py-2 bg-green-600 text-white rounded">
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-green-600 text-white rounded"
+                >
                   Create
                 </button>
               </div>
@@ -346,127 +435,354 @@ const Tnp = ({ userRole }) => {
       )}
 
       <div className="space-y-4">
-        {drives.map((drive)=>(
+        {drives.map((drive) => (
           <div key={drive._id} className="border p-4 rounded bg-gray-50">
             <h3 className="font-semibold">{drive.title}</h3>
             <p>{drive.description}</p>
             <p className="text-sm text-gray-600">
-              Deadline:{drive.deadline ? new 
-              Date(drive.deadline).toLocaleDateString()
-              : "No deadline"}
+              Deadline:
+              {drive.deadline
+                ? new Date(drive.deadline).toLocaleDateString()
+                : "No deadline"}
+            </p>
+            <p className="text-sm text-blue-600 font-medium mt-2">
+              Total Applicants:
+              {drive.applications?.length || 0}
+            </p>
+            {/* shortlist count */}
+            <div className="text-sm mt-1 space-y-1">
+              <p className="text-green-600">
+                Shortlisted:
+                {drive.applications?.filter(
+                  (app) => app.status === "SHORTLISTED",
+                ).length || 0}
               </p>
-              <p className="text-sm text-blue-600 font-medium mt-2">Total Applicants:
-                {drive.applications?.length || 0}</p>
-                {/* shortlist count */}
-                <div className="text-sm mt-1 space-y-1">
-                  <p className="text-green-600">
-                    Shortlisted:{drive.applications?.filter(app=>
-                      app.status === "SHORTLISTED").length ||0
-                    }
-                  </p>
-                </div>
-
-            {userRole==="student" && (
+            </div>
+            <div className="text-sm mt-1 space-y-1">
+              <p className="text-brown-600">
+                Selected:
+                {drive.applications?.filter((app) => app.status === "SELECTED")
+                  .length || 0}
+              </p>
+            </div>
+            <div className="text-sm mt-1 space-y-1">
+              <p className="text-red-600">
+                Rejected:
+                {drive.applications?.filter((app) => app.status === "REJECTED")
+                  .length || 0}
+              </p>
+            </div>
+            {userRole === "student" && (
               <div className="mt-3 space-y-2">
-                {/* if already Applied*/drive.applications?.some((app)=>
-                app.studentId === localStorage.getItem("userId")
-                ) ? (
-                  <p className="text-green-600 font-semibold">✅ Already Applied</p>
-                ):typeof drive.googleFormLink === "string" &&
-                drive.googleFormLink.startsWith("http")?(
-                  <a
-                  href={drive.googleFormLink}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="px-4 py-2 bg-purple-600 text-white rounded inline-block"
-                  >Apply via Google Form
-                  </a>
+                {
+                  /* if already Applied*/ drive.applications?.some(
+                    (app) => app.studentId === localStorage.getItem("userId"),
+                  ) ? (
+                    <p className="text-green-600 font-semibold">
+                      ✅ Already Applied
+                    </p>
+                  ) : typeof drive.googleFormLink === "string" &&
+                    drive.googleFormLink.startsWith("http") ? (
+                    <a
+                      href={drive.googleFormLink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-4 py-2 bg-purple-600 text-white rounded inline-block"
+                    >
+                      Apply via Google Form
+                    </a>
                   ) : (
-                  <>
-                  <input
-                  type="file"
-                  onChange={(e)=>setResumeFile(e.target.files[0])}
-                  />
-                  <button
-                  onClick={()=>applyToDrive(drive._id)}
-                  className="px-4 py-2 bg-blue-600 text-white rounded"
-                  >
-                  Apply
-                  </button>
-                  </>
-                )}
+                    <>
+                      <input
+                        type="file"
+                        onChange={(e) => setResumeFile(e.target.files[0])}
+                      />
+                      <button
+                        onClick={() => applyToDrive(drive._id)}
+                        className="px-4 py-2 bg-blue-600 text-white rounded"
+                      >
+                        Apply
+                      </button>
+                    </>
+                  )
+                }
                 {/* Show Attachment if exists */}
                 {drive.attachment && (
                   <a
-                  href={`http://localhost:4000/media/${drive.attachment}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-blue-600 underline block mt-2"
-                  >View Attachment
+                    href={`http://localhost:4000/media/${drive.attachment}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-blue-600 underline block mt-2"
+                  >
+                    View Attachment
                   </a>
                 )}
-                </div>
-              )}
-              {(userRole === "admin" || userRole === "faculty") && (
-                <button onClick={() => { setSelectedDrive(drive); setShowApplicantsModal(true);}
-              }className="mt-2 px-3 py-1 bg-indigo-600 text-white rounded text-sm">
-               View Applicants
-              </button>
+              </div>
             )}
-            </div>
+            {(userRole === "admin" || userRole === "faculty") && (
+              <>
+                <button
+                  onClick={() => {
+                    setSelectedDrive(drive);
+                    setShowApplicantsModal(true);
+                  }}
+                  className="mt-2 px-3 py-1 bg-indigo-600 text-white rounded text-sm"
+                >
+                  View Applicants
+                </button>
+                <div className="relative inline-block text-left mt-2">
+                  <button
+                    onClick={() =>
+                      setExportOpenId(
+                        exportOpenId === drive._id ? null : drive._id,
+                      )
+                    }
+                    className="px-3 py-1 bg-gradient-to-r from-gray-700 to-gray-900 
+                    text-white rounded text-sm shadow hover:scale-105 transition"
+                  >
+                    Export ▼
+                  </button>
+
+                  {exportOpenId === drive._id && (
+                    <div className="absolute right-0 mt-2 w-56 bg-gray-800 border border-gray-700 text-white rounded shadow-xl z-10 overflow-hidden">
+                      {/* APPLIED */}
+                      <button
+                        onClick={() => {
+                          handleExport(drive._id, "APPLIED");
+                          setExportOpenId(null);
+                        }}
+                        className="flex items-center gap-2 w-full text-left px-4 py-2 hover:bg-gray-600 transition"
+                      >
+                        <FaFilePdf /> Applied (PDF)
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          handleExportCSV(drive._id, "APPLIED");
+                          setExportOpenId(null);
+                        }}
+                        className="flex items-center gap-2 w-full text-left px-4 py-2 hover:bg-gray-600 transition"
+                      >
+                        <FaFileCsv /> Applied (CSV)
+                      </button>
+
+                      <div className="border-t border-gray-700"></div>
+
+                      {/* SHORTLISTED */}
+                      <button
+                        onClick={() => {
+                          handleExport(drive._id, "SHORTLISTED");
+                          setExportOpenId(null);
+                        }}
+                        className="flex items-center gap-2 w-full text-left px-4 py-2 hover:bg-green-600 hover:text-white transition"
+                      >
+                        <FaFilePdf /> Shortlisted (PDF)
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          handleExportCSV(drive._id, "SHORTLISTED");
+                          setExportOpenId(null);
+                        }}
+                        className="flex items-center gap-2 w-full text-left px-4 py-2 hover:bg-green-600 hover:text-white transition"
+                      >
+                        <FaFileCsv /> Shortlisted (CSV)
+                      </button>
+
+                      <div className="border-t border-gray-700"></div>
+
+                      {/* SELECTED */}
+                      <button
+                        onClick={() => {
+                          handleExport(drive._id, "SELECTED");
+                          setExportOpenId(null);
+                        }}
+                        className="flex items-center gap-2 w-full text-left px-4 py-2 hover:bg-blue-600 hover:text-white transition"
+                      >
+                        <FaFilePdf /> Selected (PDF)
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          handleExportCSV(drive._id, "SELECTED");
+                          setExportOpenId(null);
+                        }}
+                        className="flex items-center gap-2 w-full text-left px-4 py-2 hover:bg-blue-600 hover:text-white transition"
+                      >
+                        <FaFileCsv /> Selected (CSV)
+                      </button>
+
+                      <div className="border-t border-gray-700"></div>
+
+                      {/* REJECTED */}
+                      <button
+                        onClick={() => {
+                          handleExport(drive._id, "REJECTED");
+                          setExportOpenId(null);
+                        }}
+                        className="flex items-center gap-2 w-full text-left px-4 py-2 hover:bg-red-600 hover:text-white transition"
+                      >
+                        <FaFilePdf /> Rejected (PDF)
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          handleExportCSV(drive._id, "REJECTED");
+                          setExportOpenId(null);
+                        }}
+                        className="flex items-center gap-2 w-full text-left px-4 py-2 hover:bg-red-600 hover:text-white transition"
+                      >
+                        <FaFileCsv /> Rejected (CSV)
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
         ))}
       </div>
       {showApplicantsModal && selectedDrive && (
-  <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
-    <div className="bg-white rounded-lg w-full max-w-3xl p-6 shadow-lg max-h-[80vh] overflow-y-auto">
-      
-      <h2 className="text-lg font-semibold mb-4">
-        Applicants - {selectedDrive.title}
-      </h2>
+        <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg w-full max-w-3xl p-6 shadow-lg max-h-[80vh] overflow-y-auto">
+            <h2 className="text-lg font-semibold mb-4">
+              Applicants - {selectedDrive.title}
+            </h2>
 
-      {selectedDrive.applications?.length === 0 ? (
-        <p className="text-gray-500">No applicants yet</p>
-      ) : (
-        <div className="space-y-3">
-          {selectedDrive.applications.map((app) => (
-            <div
-              key={app._id}
-              className="border p-3 rounded flex justify-between items-center"
-            >
-              <div>
-                <p className="font-medium">Student Name:{app.studentId?.middleName || "N/A"}</p>
-                <p className="text-sm text-gray-600">Email:{app.studentId?.email || "N/A"}</p>
-                <p className="text-sm text-gray-600">Roll No:{app.studentId?.enrollmentNo || "N/A"}</p>
-                <p className="text-sm text-gray-600 mt-1">
-                  Status: {app.status || "APPLIED"}
-                </p>
+            {selectedDrive.applications?.length === 0 ? (
+              <p className="text-gray-500">No applicants yet</p>
+            ) : (
+              <div className="space-y-3">
+                {selectedDrive.applications.map((app) => (
+                  <div
+                    key={app._id}
+                    className="border p-3 rounded flex justify-between items-center"
+                  >
+                    <div>
+                      <p className="font-medium">
+                        Student Name:{app.studentId?.middleName || "N/A"}
+                      </p>
+                      <p className="text-sm text-gray-600">
+                        Email:{app.studentId?.email || "N/A"}
+                      </p>
+                      <p className="text-sm text-gray-600">
+                        Roll No:{app.studentId?.enrollmentNo || "N/A"}
+                      </p>
+                      <p className="text-sm text-gray-600 mt-1">
+                        Status: {app.status || "APPLIED"}
+                      </p>
+                      {(userRole === "admin" || userRole === "faculty") && (
+                        <div className="flex gap-2 mt-2">
+                          <button
+                            onClick={() =>
+                              updateStatus(
+                                selectedDrive._id,
+                                app._id,
+                                "SHORTLISTED",
+                              )
+                            }
+                            className="px-2 py-1 bg-yellow-500 text-white text-xs rounded"
+                          >
+                            Shortlist
+                          </button>
+
+                          <button
+                            onClick={() =>
+                              updateStatus(
+                                selectedDrive._id,
+                                app._id,
+                                "SELECTED",
+                              )
+                            }
+                            className="px-2 py-1 bg-green-600 text-white text-xs rounded"
+                          >
+                            Select
+                          </button>
+
+                          <button
+                            onClick={() =>
+                              updateStatus(
+                                selectedDrive._id,
+                                app._id,
+                                "REJECTED",
+                              )
+                            }
+                            className="px-2 py-1 bg-red-600 text-white text-xs rounded"
+                          >
+                            Reject
+                          </button>
+                        </div>
+                      )}
+                      {(userRole === "admin" || userRole === "faculty") && (
+                        <div className="flex gap-2 mt-2">
+                          <button
+                            onClick={() =>
+                              updateStatus(
+                                selectedDrive._id,
+                                app._id,
+                                "SHORTLISTED",
+                              )
+                            }
+                            className="px-2 py-1 bg-yellow-500 text-white text-xs rounded"
+                          >
+                            Shortlist
+                          </button>
+
+                          <button
+                            onClick={() =>
+                              updateStatus(
+                                selectedDrive._id,
+                                app._id,
+                                "SELECTED",
+                              )
+                            }
+                            className="px-2 py-1 bg-green-600 text-white text-xs rounded"
+                          >
+                            Select
+                          </button>
+
+                          <button
+                            onClick={() =>
+                              updateStatus(
+                                selectedDrive._id,
+                                app._id,
+                                "REJECTED",
+                              )
+                            }
+                            className="px-2 py-1 bg-red-600 text-white text-xs rounded"
+                          >
+                            Reject
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    {app.resume && (
+                      <a
+                        href={`http://localhost:4000/media/${app.resume}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-600 underline text-sm"
+                      >
+                        View Resume
+                      </a>
+                    )}
+                  </div>
+                ))}
               </div>
+            )}
 
-              {app.resume && (
-                <a
-                  href={`http://localhost:4000/media/${app.resume}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-blue-600 underline text-sm"
-                >
-                  View Resume
-                </a>
-              )}
+            <div className="flex justify-end mt-4">
+              <button
+                onClick={() => setShowApplicantsModal(false)}
+                className="px-4 py-2 bg-gray-400 text-white rounded"
+              >
+                Close
+              </button>
             </div>
-          ))}
+          </div>
         </div>
       )}
-
-      <div className="flex justify-end mt-4">
-        <button
-          onClick={() => setShowApplicantsModal(false)}
-          className="px-4 py-2 bg-gray-400 text-white rounded">
-          Close
-        </button>
-      </div>
-    </div>
-  </div>
-)}
     </div>
   );
 };
