@@ -14,7 +14,7 @@ router.get(
   ctrl.exportDriveApplicationsCSV,
 );
 router.patch(
-  "/drive/:driveId/application/:appId/status",
+  "/drive/:driveId/application/:applicationId/status",
   auth,
   ctrl.updateApplicationStatus,
 );
@@ -45,6 +45,8 @@ router.get("/drive", auth, ctrl.getAllDrives);
 
 /* Get Single Drive Details */
 router.get("/drive/:id", auth, ctrl.getDriveDetails);
+router.put("/drive/:id", auth, ctrl.updateDrive);
+router.delete("/drive/:id", auth, ctrl.deleteDrive);
 
 /* Apply to Drive (Student) */
 router.post(
@@ -56,12 +58,5 @@ router.post(
 
 /* Auto Shortlist (Admin / Faculty) */
 router.put("/drive/:id/shortlist", auth, ctrl.autoShortlist);
-
-/* Update Application Status */
-router.put(
-  "/drive/:driveId/application/:applicationId",
-  auth,
-  ctrl.updateApplicationStatus,
-);
 
 module.exports = router;

@@ -12,7 +12,7 @@ const Tnp = ({ userRole }) => {
   const [tnps, setTnps] = useState([]);
   const [drives, setDrives] = useState([]);
   const [resumeFile, setResumeFile] = useState(null);
-  const [attachmentFile, setAttachmentFile] = useState(null);
+  const [attachmentFile] = useState(null);
   const [loading, setLoading] = useState(true);
 
   const [showForm, setShowForm] = useState(false);
@@ -132,34 +132,33 @@ const Tnp = ({ userRole }) => {
   const submitDriveForm = async (e) => {
     e.preventDefault();
     try {
-      const formData = new FormData();
-      formData.append("title", driveForm.title);
-      formData.append("description", driveForm.description);
-      formData.append("deadline", driveForm.deadline);
-      formData.append("minMarks", driveForm.minMarks);
-      formData.append("googleFormLink", driveForm.googleFormLink);
+      if (editId) {
+        await axiosWrapper.put(`/tnp/drive/${editId}`, driveForm);
+        toast.success("Drive updated");
+      } else {
+        const formData = new FormData();
+        formData.append("title", driveForm.title);
+        formData.append("description", driveForm.description);
+        formData.append("deadline", driveForm.deadline);
+        formData.append("minMarks", driveForm.minMarks);
+        formData.append("googleFormLink", driveForm.googleFormLink);
 
-      if (attachmentFile) {
-        formData.append("attachment", attachmentFile);
+        if (attachmentFile) {
+          formData.append("attachment", attachmentFile);
+        }
+
+        await axiosWrapper.post("/tnp/drive", formData, {
+          headers: { "Content-Type": "multipart/form-data" },
+        });
+
+        toast.success("Drive created successfully");
       }
 
-      await axiosWrapper.post("/tnp/drive", formData, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
-
-      toast.success("Drive created successfully");
       setShowDriveForm(false);
-      setDriveForm({
-        title: "",
-        description: "",
-        deadline: "",
-        minMarks: "",
-        googleFormLink: "",
-      });
-      setAttachmentFile(null);
+      setEditId(null);
       fetchDrives();
     } catch {
-      toast.error("Failed to create drive");
+      toast.error("Failed");
     }
   };
 
@@ -240,6 +239,30 @@ const Tnp = ({ userRole }) => {
       toast.error("Failed to update status");
     }
   };
+  const handleEditDrive = (drive) => {
+    setDriveForm({
+      title: drive.title,
+      description: drive.description,
+      deadline: drive.deadline?.split("T")[0] || "",
+      minMarks: drive.minMarks || "",
+      googleFormLink: drive.googleFormLink || "",
+    });
+
+    setEditId(drive._id);
+    setShowDriveForm(true);
+  };
+  const handleDeleteDrive = async (id) => {
+    if (!window.confirm("Delete this drive?")) return;
+
+    try {
+      await axiosWrapper.delete(`/tnp/drive/${id}`);
+      toast.success("Drive deleted");
+      fetchDrives();
+    } catch {
+      toast.error("Delete failed");
+    }
+  };
+
   if (loading) return <Loading />;
 
   return (
@@ -474,15 +497,14 @@ const Tnp = ({ userRole }) => {
             </div>
             {userRole === "student" && (
               <div className="mt-3 space-y-2">
-                {
-                  /* if already Applied*/ drive.applications?.some(
-                    (app) => app.studentId === localStorage.getItem("userId"),
-                  ) ? (
-                    <p className="text-green-600 font-semibold">
-                      ✅ Already Applied
-                    </p>
-                  ) : typeof drive.googleFormLink === "string" &&
-                    drive.googleFormLink.startsWith("http") ? (
+                {drive.applications?.some(
+                  (app) => app.studentId === localStorage.getItem("userId"),
+                ) ? (
+                  <p className="text-green-600 font-semibold">
+                    ✅ Already Applied
+                  </p>
+                ) : drive.googleFormLink ? (
+                  <>
                     <a
                       href={drive.googleFormLink}
                       target="_blank"
@@ -491,22 +513,26 @@ const Tnp = ({ userRole }) => {
                     >
                       Apply via Google Form
                     </a>
-                  ) : (
-                    <>
-                      <input
-                        type="file"
-                        onChange={(e) => setResumeFile(e.target.files[0])}
-                      />
-                      <button
-                        onClick={() => applyToDrive(drive._id)}
-                        className="px-4 py-2 bg-blue-600 text-white rounded"
-                      >
-                        Apply
-                      </button>
-                    </>
-                  )
-                }
-                {/* Show Attachment if exists */}
+
+                    <p className="text-xl text-gray-700 mt-2">
+                      Applications collected externally.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <input
+                      type="file"
+                      onChange={(e) => setResumeFile(e.target.files[0])}
+                    />
+                    <button
+                      onClick={() => applyToDrive(drive._id)}
+                      className="px-4 py-2 bg-blue-600 text-white rounded"
+                    >
+                      Apply
+                    </button>
+                  </>
+                )}
+
                 {drive.attachment && (
                   <a
                     href={`http://localhost:4000/media/${drive.attachment}`}
@@ -530,6 +556,21 @@ const Tnp = ({ userRole }) => {
                 >
                   View Applicants
                 </button>
+                <div className="flex gap-4 mt-2">
+                  <button
+                    onClick={() => handleEditDrive(drive)}
+                    className="text-yellow-600 hover:text-yellow-800 font-medium"
+                  >
+                    ✏️ Edit
+                  </button>
+
+                  <button
+                    onClick={() => handleDeleteDrive(drive._id)}
+                    className="text-red-600 hover:text-red-800 font-medium"
+                  >
+                    🗑 Delete
+                  </button>
+                </div>
                 <div className="relative inline-block text-left mt-2">
                   <button
                     onClick={() =>
@@ -671,48 +712,6 @@ const Tnp = ({ userRole }) => {
                       <p className="text-sm text-gray-600 mt-1">
                         Status: {app.status || "APPLIED"}
                       </p>
-                      {(userRole === "admin" || userRole === "faculty") && (
-                        <div className="flex gap-2 mt-2">
-                          <button
-                            onClick={() =>
-                              updateStatus(
-                                selectedDrive._id,
-                                app._id,
-                                "SHORTLISTED",
-                              )
-                            }
-                            className="px-2 py-1 bg-yellow-500 text-white text-xs rounded"
-                          >
-                            Shortlist
-                          </button>
-
-                          <button
-                            onClick={() =>
-                              updateStatus(
-                                selectedDrive._id,
-                                app._id,
-                                "SELECTED",
-                              )
-                            }
-                            className="px-2 py-1 bg-green-600 text-white text-xs rounded"
-                          >
-                            Select
-                          </button>
-
-                          <button
-                            onClick={() =>
-                              updateStatus(
-                                selectedDrive._id,
-                                app._id,
-                                "REJECTED",
-                              )
-                            }
-                            className="px-2 py-1 bg-red-600 text-white text-xs rounded"
-                          >
-                            Reject
-                          </button>
-                        </div>
-                      )}
                       {(userRole === "admin" || userRole === "faculty") && (
                         <div className="flex gap-2 mt-2">
                           <button

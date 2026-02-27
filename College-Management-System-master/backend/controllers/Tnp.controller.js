@@ -133,6 +133,42 @@ exports.getDriveDetails = async (req, res) => {
     res.status(500).json({ success: false });
   }
 };
+exports.updateDrive = async (req, res) => {
+  try {
+    if (!["admin", "faculty"].includes(req.user.role.toLowerCase())) {
+      return res.status(403).json({ success: false });
+    }
+
+    const drive = await Tnp.findByIdAndUpdate(req.params.id, req.body, {
+      new: true,
+    });
+
+    if (!drive) return res.status(404).json({ success: false });
+
+    res.json({ success: true, data: drive });
+  } catch (e) {
+    console.error(e);
+    res.status(400).json({ success: false });
+  }
+};
+exports.deleteDrive = async (req, res) => {
+  try {
+    if (!["admin", "faculty"].includes(req.user.role.toLowerCase())) {
+      return res.status(403).json({ success: false });
+    }
+
+    const drive = await Tnp.findByIdAndDelete(req.params.id);
+
+    if (!drive) {
+      return res.status(404).json({ success: false });
+    }
+
+    res.json({ success: true });
+  } catch (e) {
+    console.error(e);
+    res.status(400).json({ success: false });
+  }
+};
 
 exports.applyToDrive = async (req, res) => {
   try {
