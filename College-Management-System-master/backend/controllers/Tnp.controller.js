@@ -275,12 +275,21 @@ exports.autoShortlist = async (req, res) => {
     if (!drive) return res.status(404).json({ success: false });
 
     drive.applications.forEach((app) => {
-      app.status = "SHORTLISTED";
+      if (app.status === "SELECTED" || app.status === "REJECTED") {
+        return;
+      }
+
+      if (app.marks >= drive.minMarks) {
+        app.status = "SHORTLISTED";
+      } else {
+        app.status = "APPLIED";
+      }
     });
 
     await drive.save();
     res.json({ success: true });
   } catch (e) {
+    console.error(e);
     res.status(500).json({ success: false });
   }
 };

@@ -32,7 +32,7 @@ const Material = () => {
     branch: "",
     type: "",
   });
-  const [error, setError] = useState(null);
+  // const [error, setError] = useState(null);
 
   useEffect(() => {
     fetchSubjects();
@@ -45,8 +45,8 @@ const Material = () => {
   }, [filters]);
 
   const fetchSubjects = async () => {
+    const toastId = toast.loading("Loading subjects...");
     try {
-      toast.loading("Loading subjects...");
       const response = await axiosWrapper.get("/subject", {
         headers: {
           "Content-Type": "application/json",
@@ -61,17 +61,19 @@ const Material = () => {
         setSubjects([]);
       } else {
         toast.error(
-          error?.response?.data?.message || "Failed to load subjects"
+          error?.response?.data?.message || "Failed to load subjects",
+          { id: toastId },
         );
+        return;
       }
     } finally {
-      toast.dismiss();
+      toast.dismiss(toastId);
     }
   };
 
   const fetchBranches = async () => {
+    const toastId = toast.loading("Loading branches...");
     try {
-      toast.loading("Loading branches...");
       const response = await axiosWrapper.get("/branch", {
         headers: {
           "Content-Type": "application/json",
@@ -86,17 +88,19 @@ const Material = () => {
         setBranches([]);
       } else {
         toast.error(
-          error?.response?.data?.message || "Failed to load branches"
+          error?.response?.data?.message || "Failed to load branches",
+          { id: toastId },
         );
+        return;
       }
     } finally {
-      toast.dismiss();
+      toast.dismiss(toastId);
     }
   };
 
   const fetchMaterials = async () => {
+    const toastId = toast.loading("Loading materials...");
     try {
-      toast.loading("Loading materials...");
       const queryParams = new URLSearchParams();
       Object.entries(filters).forEach(([key, value]) => {
         if (value) queryParams.append(key, value);
@@ -116,11 +120,13 @@ const Material = () => {
         setMaterials([]);
       } else {
         toast.error(
-          error?.response?.data?.message || "Failed to load materials"
+          error?.response?.data?.message || "Failed to load materials",
+          { id: toastId },
         );
+        return;
       }
     } finally {
-      toast.dismiss();
+      toast.dismiss(toastId);
     }
   };
 
@@ -159,8 +165,8 @@ const Material = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setDataLoading(true);
-    toast.loading(
-      editingMaterial ? "Updating material..." : "Adding material..."
+    const toastId = toast.loading(
+      editingMaterial ? "Updating material..." : "Adding material...",
     );
 
     try {
@@ -175,8 +181,9 @@ const Material = () => {
       if (editingMaterial) {
         await axiosWrapper.put(
           `/material/${editingMaterial._id}`,
-          formDataToSend
+          formDataToSend,
         );
+        toast.dismiss(toastId);
         toast.success("Material updated successfully");
       } else {
         await axiosWrapper.post("/material", formDataToSend, {
@@ -185,6 +192,7 @@ const Material = () => {
             Authorization: `Bearer ${localStorage.getItem("userToken")}`,
           },
         });
+        toast.dismiss(toastId);
         toast.success("Material added successfully");
       }
 
@@ -192,10 +200,10 @@ const Material = () => {
       resetForm();
       fetchMaterials();
     } catch (error) {
+      toast.dismiss(toastId);
       toast.error(error?.response?.data?.message || "Operation failed");
     } finally {
       setDataLoading(false);
-      toast.dismiss();
     }
   };
 
@@ -224,7 +232,7 @@ const Material = () => {
       fetchMaterials();
     } catch (error) {
       toast.error(
-        error?.response?.data?.message || "Failed to delete material"
+        error?.response?.data?.message || "Failed to delete material",
       );
     }
   };
@@ -347,7 +355,7 @@ const Material = () => {
                       variant="primary"
                       onClick={() => {
                         window.open(
-                          `${process.env.REACT_APP_MEDIA_LINK}/${material.file}`
+                          `${process.env.REACT_APP_MEDIA_LINK}/${material.file}`,
                         );
                       }}
                     >
@@ -542,8 +550,8 @@ const Material = () => {
                   {dataLoading
                     ? "Processing..."
                     : editingMaterial
-                    ? "Update Material"
-                    : "Add Material"}
+                      ? "Update Material"
+                      : "Add Material"}
                 </CustomButton>
               </div>
             </form>

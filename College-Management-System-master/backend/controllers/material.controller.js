@@ -24,7 +24,7 @@ const getMaterialsController = async (req, res) => {
 
     return ApiResponse.success(
       materials,
-      "Materials retrieved successfully"
+      "Materials retrieved successfully",
     ).send(res);
   } catch (error) {
     console.error("Get Materials Error: ", error);
@@ -51,7 +51,7 @@ const addMaterialController = async (req, res) => {
     const material = await Material.create({
       title,
       subject,
-      faculty: req.userId, // From auth middleware
+      faculty: req.user._id, // From auth middleware
       semester,
       branch,
       type,
@@ -65,7 +65,7 @@ const addMaterialController = async (req, res) => {
 
     return ApiResponse.created(
       populatedMaterial,
-      "Material added successfully"
+      "Material added successfully",
     ).send(res);
   } catch (error) {
     console.error("Add Material Error: ", error);
@@ -88,9 +88,9 @@ const updateMaterialController = async (req, res) => {
       return ApiResponse.notFound("Material not found").send(res);
     }
 
-    if (material.faculty.toString() !== req.userId) {
+    if (material.faculty.toString() !== req.user._id) {
       return ApiResponse.unauthorized(
-        "You are not authorized to update this material"
+        "You are not authorized to update this material",
       ).send(res);
     }
 
@@ -116,7 +116,7 @@ const updateMaterialController = async (req, res) => {
 
     return ApiResponse.success(
       updatedMaterial,
-      "Material updated successfully"
+      "Material updated successfully",
     ).send(res);
   } catch (error) {
     console.error("Update Material Error: ", error);
@@ -138,9 +138,9 @@ const deleteMaterialController = async (req, res) => {
       return ApiResponse.notFound("Material not found").send(res);
     }
 
-    if (material.faculty.toString() !== req.userId) {
+    if (material.faculty.toString() !== req.user._id) {
       return ApiResponse.unauthorized(
-        "You are not authorized to delete this material"
+        "You are not authorized to delete this material",
       ).send(res);
     }
 

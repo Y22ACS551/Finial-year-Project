@@ -199,7 +199,7 @@ const getStudentsWithMarksController = async (req, res) => {
 
     const studentsWithMarks = students.map((student) => {
       const studentMarks = marks.find(
-        (m) => m.studentId.toString() === student._id.toString()
+        (m) => m.studentId.toString() === student._id.toString(),
       );
       return {
         ...student.toObject(),
@@ -224,7 +224,7 @@ const getStudentsWithMarksController = async (req, res) => {
 const getStudentMarksController = async (req, res) => {
   try {
     const { semester } = req.query;
-    const studentId = req.userId;
+    const studentId = req.user._id;
 
     if (!semester) {
       return res.status(400).json({

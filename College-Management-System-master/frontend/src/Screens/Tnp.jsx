@@ -262,6 +262,15 @@ const Tnp = ({ userRole }) => {
       toast.error("Delete failed");
     }
   };
+  const autoShortlist = async (driveId) => {
+    try {
+      await axiosWrapper.put(`/tnp/drive/${driveId}/shortlist`);
+      toast.success("Auto Shortlisted Successfully");
+      fetchDrives();
+    } catch {
+      toast.error("Auto Shortlist Failed");
+    }
+  };
 
   if (loading) return <Loading />;
 
@@ -556,6 +565,12 @@ const Tnp = ({ userRole }) => {
                 >
                   View Applicants
                 </button>
+                <button
+                  onClick={() => autoShortlist(drive._id)}
+                  className="mt-2 ml-2 px-3 py-1 bg-purple-600 text-white rounded text-sm"
+                >
+                  ⚡ Auto Shortlist
+                </button>
                 <div className="flex gap-4 mt-2">
                   <button
                     onClick={() => handleEditDrive(drive)}
@@ -571,111 +586,56 @@ const Tnp = ({ userRole }) => {
                     🗑 Delete
                   </button>
                 </div>
-                <div className="relative inline-block text-left mt-2">
-                  <button
-                    onClick={() =>
-                      setExportOpenId(
-                        exportOpenId === drive._id ? null : drive._id,
-                      )
-                    }
-                    className="px-3 py-1 bg-gradient-to-r from-gray-700 to-gray-900 
-                    text-white rounded text-sm shadow hover:scale-105 transition"
-                  >
-                    Export ▼
-                  </button>
+                <div className="flex flex-wrap gap-3 mt-3">
+                  {["APPLIED", "SHORTLISTED", "SELECTED", "REJECTED"].map(
+                    (status) => {
+                      const colorMap = {
+                        APPLIED: "bg-gray-700 hover:bg-gray-800",
+                        SHORTLISTED: "bg-green-600 hover:bg-green-700",
+                        SELECTED: "bg-blue-600 hover:bg-blue-700",
+                        REJECTED: "bg-red-600 hover:bg-red-700",
+                      };
 
-                  {exportOpenId === drive._id && (
-                    <div className="absolute right-0 mt-2 w-56 bg-gray-800 border border-gray-700 text-white rounded shadow-xl z-10 overflow-hidden">
-                      {/* APPLIED */}
-                      <button
-                        onClick={() => {
-                          handleExport(drive._id, "APPLIED");
-                          setExportOpenId(null);
-                        }}
-                        className="flex items-center gap-2 w-full text-left px-4 py-2 hover:bg-gray-600 transition"
-                      >
-                        <FaFilePdf /> Applied (PDF)
-                      </button>
+                      return (
+                        <div key={status} className="relative">
+                          <button
+                            onClick={() =>
+                              setExportOpenId(
+                                exportOpenId === `${status}-${drive._id}`
+                                  ? null
+                                  : `${status}-${drive._id}`,
+                              )
+                            }
+                            className={`px-3 py-1 text-white text-sm rounded transition ${colorMap[status]}`}
+                          >
+                            {status} ▼
+                          </button>
 
-                      <button
-                        onClick={() => {
-                          handleExportCSV(drive._id, "APPLIED");
-                          setExportOpenId(null);
-                        }}
-                        className="flex items-center gap-2 w-full text-left px-4 py-2 hover:bg-gray-600 transition"
-                      >
-                        <FaFileCsv /> Applied (CSV)
-                      </button>
-
-                      <div className="border-t border-gray-700"></div>
-
-                      {/* SHORTLISTED */}
-                      <button
-                        onClick={() => {
-                          handleExport(drive._id, "SHORTLISTED");
-                          setExportOpenId(null);
-                        }}
-                        className="flex items-center gap-2 w-full text-left px-4 py-2 hover:bg-green-600 hover:text-white transition"
-                      >
-                        <FaFilePdf /> Shortlisted (PDF)
-                      </button>
-
-                      <button
-                        onClick={() => {
-                          handleExportCSV(drive._id, "SHORTLISTED");
-                          setExportOpenId(null);
-                        }}
-                        className="flex items-center gap-2 w-full text-left px-4 py-2 hover:bg-green-600 hover:text-white transition"
-                      >
-                        <FaFileCsv /> Shortlisted (CSV)
-                      </button>
-
-                      <div className="border-t border-gray-700"></div>
-
-                      {/* SELECTED */}
-                      <button
-                        onClick={() => {
-                          handleExport(drive._id, "SELECTED");
-                          setExportOpenId(null);
-                        }}
-                        className="flex items-center gap-2 w-full text-left px-4 py-2 hover:bg-blue-600 hover:text-white transition"
-                      >
-                        <FaFilePdf /> Selected (PDF)
-                      </button>
-
-                      <button
-                        onClick={() => {
-                          handleExportCSV(drive._id, "SELECTED");
-                          setExportOpenId(null);
-                        }}
-                        className="flex items-center gap-2 w-full text-left px-4 py-2 hover:bg-blue-600 hover:text-white transition"
-                      >
-                        <FaFileCsv /> Selected (CSV)
-                      </button>
-
-                      <div className="border-t border-gray-700"></div>
-
-                      {/* REJECTED */}
-                      <button
-                        onClick={() => {
-                          handleExport(drive._id, "REJECTED");
-                          setExportOpenId(null);
-                        }}
-                        className="flex items-center gap-2 w-full text-left px-4 py-2 hover:bg-red-600 hover:text-white transition"
-                      >
-                        <FaFilePdf /> Rejected (PDF)
-                      </button>
-
-                      <button
-                        onClick={() => {
-                          handleExportCSV(drive._id, "REJECTED");
-                          setExportOpenId(null);
-                        }}
-                        className="flex items-center gap-2 w-full text-left px-4 py-2 hover:bg-red-600 hover:text-white transition"
-                      >
-                        <FaFileCsv /> Rejected (CSV)
-                      </button>
-                    </div>
+                          {exportOpenId === `${status}-${drive._id}` && (
+                            <div className="absolute left-0 mt-2 w-40 bg-gray-800 text-white rounded shadow-lg z-20">
+                              <button
+                                onClick={() => {
+                                  handleExport(drive._id, status);
+                                  setExportOpenId(null);
+                                }}
+                                className="block w-full text-left px-4 py-2 hover:bg-gray-700"
+                              >
+                                PDF
+                              </button>
+                              <button
+                                onClick={() => {
+                                  handleExportCSV(drive._id, status);
+                                  setExportOpenId(null);
+                                }}
+                                className="block w-full text-left px-4 py-2 hover:bg-gray-700"
+                              >
+                                CSV
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    },
                   )}
                 </div>
               </>
